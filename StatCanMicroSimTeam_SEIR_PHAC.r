@@ -104,7 +104,7 @@ load_packages <- lapply(package_names, require, character.only = TRUE)
 WDir <- "C:/Users/maiko/Downloads/SEIR_Model/"    # working directory 
 setwd(WDir)
 
-source("UtilitiesChunks.R")
+source("UtilitiesChunks.R") 
 
 
 file_name <- "input_sheet_v2.xls"
@@ -325,7 +325,6 @@ for(k in 1:length(init_list)){
 }
  
   # Add outputs to the list
-  #listOut[[interval.label]] <- list(all.times = out, final.time = as.data.frame.from.tbl(out_for_init), bof.remove = init)
   listOut[[i]] <- out
 }
 
@@ -350,7 +349,58 @@ for (p in 1: nagegrp){
   varsc<-names(big_out)[grepl(p,names(big_out))]
 }
 
-write.csv(big_out,"C:/Users/maiko/Downloads/SEIR_Model/SEIR_results.csv", row.names = FALSE)
+write.csv(big_out,paste0(WDir,"SEIR_results.csv"), row.names = FALSE)
+
 #==========================================================================
 #  Graphics 
 #==========================================================================
+big_out_graphs <- big_out %>%
+  select_at(vars(starts_with(c("time","S","L_tot","I_tot","R","D"))))%>%
+  filter(time < 365.25) # I set a limit of 365.25 days
+
+get_plot <- function(data, age_group) {
+  # Subset the data frame to include only the vectors of interest
+  data_subset <- filter(data, meta_key %in% paste0(c("S","L_tot","I_tot","R","D"), age_group))
+  
+  # Refactor the meta_key vector so that levels no longer represented in the vector are removed
+  data_subset$meta_key <- factor(data_subset$meta_key)
+  
+  # Add labels to the factor, which will also appear in the legend
+  data_subset$meta_key <- factor(data_subset$meta_key, levels = rev(levels(data_subset$meta_key)), labels =    c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
+  
+  # Output the plot
+  ggplot(
+    data_subset, 
+    aes(x = time, y = meta_value)
+  ) + 
+    geom_line(aes(color = meta_key), size = 0.55) +
+    ggtitle(paste0("SEIR model, age group ", age_group)) +
+    xlab("Time (days)") +
+    ylab("N (individuals)") +
+    scale_color_viridis(discrete = TRUE) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 10),
+      axis.title.x = element_text(size = 10),
+      axis.title.y = element_text(size = 10),
+      legend.title = element_blank()
+    )
+}
+# Reshape SEIR model output from wide to long format
+big_out_long <- gather(big_out_graphs, key = meta_key, value = meta_value, 2:ncol(big_out_graphs), factor_key = TRUE)
+# Find unique number of age groups
+agegrps <- unique(as.numeric(gsub("[^0-9]", "", big_out_long$meta_key)))
+# Create a time series plot for each age group and add it to a list object
+plots <- lapply(agegrps, FUN = get_plot, data = big_out_long)
+# Output the plots in a panel
+ggarrange(plotlist = plots, ncol = 2, nrow = ceiling(length(plots)/ 2), common.legend = TRUE)
+
+
+#################################################################################
+#      
+#     ^^
+#    (oo)     WORK IN PROGRESS......
+#   _(  )_                          checking the results of the last age group...
+#     ""
+#
+#################################################################################
