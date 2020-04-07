@@ -227,7 +227,9 @@ SEIR.n.Age.Classes <- function( time=NULL, age.parms = NULL, age.age.parms = NUL
     with(as.list(c(list.inits, list.parms)),{
       
       I_sum <- I_a + I_aqn + I_sm + I_ss + I_smisn + I_ssisn + I_ar + I_smr + I_ssr + I_smrisn + I_ssrisn + phi * I_aq
+      I_ssss <- I_ssis + I_ssisn + I_ssh + I_ssrisn
       BetaCrOneMinusLambda <- BetaC_OneMinusLambda <- BetaCqLambda <- C_OneMinusLambda <- CqLambda <-  CrOneMinusLambda <- CqLambda <- one <- as.matrix(rep(1,nage))
+      
       OneMinusLambda <- (one - lambda)
       C_OneMinusLambda     <- c_ %*% OneMinusLambda          
       CrOneMinusLambda     <- cr %*% OneMinusLambda          
@@ -236,34 +238,33 @@ SEIR.n.Age.Classes <- function( time=NULL, age.parms = NULL, age.age.parms = NUL
       BetaC_OneMinusLambda <- beta %*% C_OneMinusLambda  
       BetaCqLambda         <- beta %*% CqLambda          
       
-      
       # rates of change that depends on matrices
       #--------------------------------------------
-      dS   <- -(BetaCrOneMinusLambda + BetaC_OneMinusLambda + BetaCqLambda) * S * I_sum
-      dL   <- BetaC_OneMinusLambda * tau * S * I_sum - sigma * L
-      dL_q <- BetaCqLambda* S * I_sum - sigma * L_q
-      dL_r <- BetaCrOneMinusLambda * (one -  tau) * S * I_sum - sigma * L_r
+      dS   <- -((BetaCrOneMinusLambda*(one-tau)) + (BetaC_OneMinusLambda*tau) + BetaCqLambda)*S*I_sum 
+      dL_r <- ((BetaCrOneMinusLambda *(one-tau))*S*I_sum) - (sigma*L_r)                                       
+      dL_q <- (BetaCqLambda*S*I_sum) - (((sigma*(one - rho)) + (sigma*rho))*L_q)                      
+      dL   <- ((BetaC_OneMinusLambda*tau) *S*I_sum) - (sigma*L)                                          
       
       # rates of change that depends on vectors
       #--------------------------------------------
-      dI_a      <- sigma * L - I_a * delta * epsilon - I_a * (one -  delta) * upsilon
-      dI_aq     <- sigma * rho * L_q - I_aq * delta * epsilon - I_aq * (one -  delta) * upsilon
-      dI_ar     <- sigma * L_r - I_ar * delta * epsilon - I_ar * (one -  delta) * upsilon
-      dI_aqn    <- sigma * (one -  rho) * L_q - I_aqn * delta * epsilon - I_aqn * (one -  delta) * upsilon
-      dI_sm     <- (I_a + I_aqn) * delta * epsilon * alpha - kappa * I_sm # updated
-      dI_ss     <- (I_a + I_aqn) * delta * epsilon * OneMinusLambda - kappa * I_ss # updated
-      dI_smr    <- I_ar * delta * epsilon * alpha - kappa * I_smr
-      dI_ssr    <- I_ar * delta * epsilon * OneMinusLambda - kappa * I_ssr
-      dI_smis   <- kappa * feim * I_sm + kappa * feimr * I_smr + delta * alpha * epsilonq * feimq * I_aq - num * I_smis
-      dI_smisn  <- kappa * (one -  feim) * I_sm - num * I_smisn
-      dI_ssis   <- kappa * feisi * (I_ss + I_ssr) - I_ssis * ((one -  mu) * nus + mu * nud)
-      dI_ssisn  <- kappa * ((one - feisi-feish) * I_ss)  - I_ssisn * ((one -  mu) * nus + mu * nud) # updated
-      dI_ssh    <- kappa * feish * (I_ss + I_ssr) + delta * OneMinusLambda * epsilonq * I_aq - I_ssh * ((one - mu) * nus + mu * nud)
+      dI_a      <- (sigma*L) - ((delta*epsilon*alpha) + (delta*epsilon*OneMinusLambda) + ((one - delta)*upsilon))* I_a          
+      dI_ar     <- (sigma*L_r) - ((delta*epsilon*alpha) + (delta*epsilon*OneMinusLambda) + ((one - delta)*upsilon))*I_ar  
+      dI_aq     <-  (sigma*rho*L_q) - ((delta*epsilonq*(alpha*feimq + OneMinusLambda + alpha*(one-feimq)))+((one - delta) * upsilon)) *I_aq
+      dI_aqn    <- (sigma*(one -  rho)*L_q) - ((delta*epsilon* alpha) + (delta*epsilon*OneMinusLambda) + ((one -  delta)*upsilon))*I_aqn
+      dI_smr    <- (delta * epsilon * alpha* I_ar) - (kappa * I_smr)
+      dI_ssr    <- (delta * epsilon * OneMinusLambda * I_ar) - (kappa*I_ssr)
+      dI_sm     <- (delta * epsilon * alpha * (I_a + I_aqn)) - (kappa * I_sm)
+      dI_ss     <- ((delta * epsilon * OneMinusLambda) * (I_a + I_aqn)) - kappa * I_ss
       dI_smrisn <- kappa * (one - feimr) * I_smr - num * I_smrisn
-      dI_ssrisn <- kappa * (one - feisi-feish) * (I_ssr) - I_ssrisn * ((one -  mu) * nus + mu * nud)
-      dI_smqisn <- I_aq * delta * alpha * epsilonq * (one - feimq) - num * I_smqisn
-      dR        <- (I_a + I_aq + I_aqn + I_ar) * (one - delta) * upsilon + num * (I_smis + I_smisn + I_smqisn + I_smrisn) + (I_ssis + I_ssisn + I_ssh + I_ssrisn) * (one - mu) * nus
-      dD        <- mu * nud * (I_ssis + I_ssisn + I_ssh + I_ssrisn)
+      dI_ssrisn <- (kappa * (one - feisi-feish) * I_ssr) - ((one -  mu) * nus + (mu * nud))* I_ssrisn 
+      dI_smisn  <- kappa * (one -  feim) * I_sm - (num * I_smisn)
+      dI_ssh    <- kappa * feish * (I_ss + I_ssr) + (delta * OneMinusLambda * epsilonq) * I_aq - ((one - mu) * nus + (mu * nud)) * I_ssh
+      dI_ssisn  <- (kappa * ((one - feisi-feish)) * I_ss)  - ((one -  mu) * nus + (mu * nud)) * I_ssisn       
+      dI_smis   <- (delta * alpha * epsilonq * feimq) * I_aq + (kappa * feimr) * I_smr + (kappa * feim) * I_sm  - (num * I_smis)
+      dI_ssis   <- kappa * feisi * (I_ss + I_ssr) -  ((one -  mu) * nus + (mu * nud))* I_ssis     
+      dI_smqisn <- (delta * alpha * epsilonq * (one - feimq))*I_aq - num * I_smqisn
+      dR        <- ((one - delta) * upsilon)*(I_a + I_aq + I_aqn + I_ar) + num * (I_smis + I_smisn + I_smqisn + I_smrisn) + (one - mu) * nus *I_ssss
+      dD        <- mu * nud * I_ssss
       
       out <- eval(parse(text=paste0("c(", paste0("d", paste(names.inits, collapse=", d")),")"))) # out = c(dS, dL, .... , dR, dD)
       
