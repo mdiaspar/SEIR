@@ -432,7 +432,7 @@ get_plot <- function(data, age_group) {
     ggtitle(paste0("SEIR model, age group ", lookup[age_group])) +
     xlab("Time (days)") +
     ylab("N (individuals)") +
-    scale_color_viridis(discrete = TRUE) +
+    scale_color_discrete(name = "") +
     theme_minimal() +
     theme(
       plot.title = element_text(size = 10),
@@ -446,7 +446,7 @@ big_out_long <- gather(big_out_graphs, key = meta_key, value = meta_value, 2:nco
 # Create a time series plot for each age group and add it to a list object
 plots <- lapply(1:nagegrp, FUN = get_plot, data = big_out_long)
 # Output the plots in a panel
-ggarrange(plotlist = plots, ncol = 2, nrow = ceiling(length(plots)/ 2), common.legend = TRUE)
+ggarrange(plotlist = plots, ncol = 1, nrow = length(plots), common.legend = TRUE)
 
 #################################################################################
 #      

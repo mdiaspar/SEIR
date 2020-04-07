@@ -1,4 +1,3 @@
-
 rm(list = ls())
 #################################################################################
 #
@@ -102,21 +101,20 @@ load_packages <- lapply(package_names, require, character.only = TRUE)
 
 ### User input parameters
 WDir <- "C:/Users/maiko/Downloads/SEIR_Model/"    # working directory 
-WDir <- "c:/users/joel/google drive/github/SEIR-1/"
+WDir <- "C:/Users/joel/google drive/github/seir-1/"    # working directory 
 setwd(WDir)
 
 source("UtilitiesChunks.R") 
 
-
-file_name <- "input_sheet_v2.xls"
+file_name <- "input_sheet_5agegrp.xls"
+#file_name <- "input_sheet_1agegrp.xls"
 
 time_stuff   <- as.data.frame.from.tbl( readxl::read_excel(paste(WDir,file_name,sep=""),sheet = "time") )   # other parameters
 time_stuff_m <- as.data.frame.from.tbl( readxl::read_excel(paste(WDir,file_name,sep=""), sheet = "time2") ) # c_, cr, cq, and beta
 input_stuff  <- as.data.frame.from.tbl( readxl::read_excel(paste(WDir,file_name,sep=""), sheet = "input") ) # initial values
 
-
-
 nagegrp <- length(unique(time_stuff$agegrp))        # number of age groups
+
 nrow_   <- dim(time_stuff)[1]/nagegrp
 
 time_stuff <- dplyr::arrange(time_stuff, tmin, agegrp) # sort by tmin agegrp
@@ -126,26 +124,20 @@ time_stuff <- time_stuff %>%
 time_stuff_m <- arrange(time_stuff_m, tmin, cagegrp, ragegrp) # sort by tmin cagegrp  ragegrp
 time_stuff_m <- time_stuff_m %>%
   mutate(isim = rep(1:nrow_, each = nagegrp*nagegrp))
-
-
 #===================================================================
 # Initial values (components)
 #===================================================================
-
 #initial values
 input_stuff_age_columns = setdiff(colnames(input_stuff), "NAME")
-
 init_list <- list()
 for(k in input_stuff$NAME){
   init_list[[k]] <- as.matrix( subset(input_stuff, NAME == k)[,input_stuff_age_columns] )
 }
-
 #==========================================================================
 #  Main routine
 #==========================================================================
 # The SEIR model with N age classes
 #
-
 SEIR.n.Age.Classes <- function( time=NULL, age.parms = NULL, age.age.parms = NULL,list.inits = NULL, not.parms=  c("tmin", "tmax", "agegrp", "cagegrp", "ragegrp", "isim"))
 {
   nage = nrow(age.parms)
@@ -183,15 +175,18 @@ SEIR.n.Age.Classes <- function( time=NULL, age.parms = NULL, age.age.parms = NUL
     iota <- seq(length(vec.inits)/length(names.inits)) 
     list.inits <- list()
     for(k in names.inits){
-      list.inits[[k]] <- vec.inits[paste0(k, iota)] 
+      if (length(iota) > 1) {
+        list.inits[[k]] <- vec.inits[paste0(k, iota)] 
+      }else{list.inits[[k]] <- vec.inits[k] }
     }
     
     with(as.list(c(list.inits, list.parms)),{
       
       I_sum <- I_a + I_aqn + I_sm + I_ss + I_smisn + I_ssisn + I_ar + I_smr + I_ssr + I_smrisn + I_ssrisn + phi * I_aq
+      I_ssss <- I_ssis + I_ssisn + I_ssh + I_ssrisn
       BetaCrOneMinusLambda <- BetaC_OneMinusLambda <- BetaCqLambda <- C_OneMinusLambda <- CqLambda <-  CrOneMinusLambda <- CqLambda <- one <- as.matrix(rep(1,nage))
+      
       OneMinusLambda <- (one - lambda)
-
       C_OneMinusLambda     <- c_ %*% OneMinusLambda          
       CrOneMinusLambda     <- cr %*% OneMinusLambda          
       CqLambda             <- cq %*% OneMinusLambda          
@@ -199,34 +194,37 @@ SEIR.n.Age.Classes <- function( time=NULL, age.parms = NULL, age.age.parms = NUL
       BetaC_OneMinusLambda <- beta %*% C_OneMinusLambda  
       BetaCqLambda         <- beta %*% CqLambda          
       
-      
       # rates of change that depends on matrices
       #--------------------------------------------
-      dS   <- -(BetaCrOneMinusLambda + BetaC_OneMinusLambda + BetaCqLambda) * S * I_sum
-      dL   <- BetaC_OneMinusLambda * tau * S * I_sum - sigma * L
-      dL_q <- BetaCqLambda* S * I_sum - sigma * L_q
-      dL_r <- BetaCrOneMinusLambda * (one -  tau) * S * I_sum - sigma * L_r
+      dS   <- -((BetaCrOneMinusLambda*(one-tau)) + (BetaC_OneMinusLambda*tau) + BetaCqLambda)*S*I_sum 
+      dL_r <- ((BetaCrOneMinusLambda *(one-tau))*S*I_sum) - (sigma*L_r)                                       
+      dL_q <- (BetaCqLambda*S*I_sum) - (((sigma*(one - rho)) + (sigma*rho))*L_q)                      
+      dL   <- ((BetaC_OneMinusLambda*tau) *S*I_sum) - (sigma*L)                                          
       
       # rates of change that depends on vectors
       #--------------------------------------------
-      dI_a      <- sigma * L - I_a * delta * epsilon - I_a * (one -  delta) * upsilon
-      dI_aq     <- sigma * rho * L_q - I_aq * delta * epsilon - I_aq * (one -  delta) * upsilon
-      dI_ar     <- sigma * L_r - I_ar * delta * epsilon - I_ar * (one -  delta) * upsilon
-      dI_aqn    <- sigma * (one -  rho) * L_q - I_aqn * delta * epsilon - I_aqn * (one -  delta) * upsilon
-      dI_sm     <- (I_a + I_aqn) * delta * epsilon * alpha - kappa * I_sm # updated
-      dI_ss     <- (I_a + I_aqn) * delta * epsilon * OneMinusLambda - kappa * I_ss # updated
-      dI_smr    <- I_ar * delta * epsilon * alpha - kappa * I_smr
-      dI_ssr    <- I_ar * delta * epsilon * OneMinusLambda - kappa * I_ssr
-      dI_smis   <- kappa * feim * I_sm + kappa * feimr * I_smr + delta * alpha * epsilonq * feimq * I_aq - num * I_smis
-      dI_smisn  <- kappa * (one -  feim) * I_sm - num * I_smisn
-      dI_ssis   <- kappa * feisi * (I_ss + I_ssr) - I_ssis * ((one -  mu) * nus + mu * nud)
-      dI_ssisn  <- kappa * ((one - feisi-feish) * I_ss)  - I_ssisn * ((one -  mu) * nus + mu * nud) # updated
-      dI_ssh    <- kappa * feish * (I_ss + I_ssr) + delta * OneMinusLambda * epsilonq * I_aq - I_ssh * ((one - mu) * nus + mu * nud)
+      dI_a      <- (sigma*L) - ((delta*epsilon*alpha) + (delta*epsilon*OneMinusLambda) + ((one - delta)*upsilon))* I_a          
+      dI_ar     <- (sigma*L_r) - ((delta*epsilon*alpha) + (delta*epsilon*OneMinusLambda) + ((one - delta)*upsilon))*I_ar  
+      dI_aq     <-  (sigma*rho*L_q) - ((delta*epsilonq*(alpha*feimq + OneMinusLambda + alpha*(one-feimq)))+((one - delta) * upsilon)) *I_aq
+      dI_aqn    <- (sigma*(one -  rho)*L_q) - ((delta*epsilon* alpha) + (delta*epsilon*OneMinusLambda) + ((one -  delta)*upsilon))*I_aqn
+      #dI_smr   <- ((delta * epsilon * alpha)*I_ar) - ((kappa * (one - feimr)) + (kappa * feimr))*I_smr
+      dI_smr    <- (delta * epsilon * alpha* I_ar) - (kappa * I_smr)
+      #dI_ssr   <- (delta * epsilon * OneMinusLambda * I_ar) - (kappa * ((one - feisi-feish) + feisi + feish))*I_ssr
+      dI_ssr    <- (delta * epsilon * OneMinusLambda * I_ar) - (kappa*I_ssr)
+      #dI_sm    <- (delta * epsilon * alpha * (I_a + I_aqn)) - ((kappa * feim) + (kappa * (one -  feim)))*I_sm
+      dI_sm     <- (delta * epsilon * alpha * (I_a + I_aqn)) - (kappa * I_sm)
+      #dI_ss    <- ((delta * epsilon * OneMinusLambda) * (I_a + I_aqn)) - ((kappa * feisi) + (kappa * (one - feisi-feish)) + (kappa * feish))*I_ss
+      dI_ss     <- ((delta * epsilon * OneMinusLambda) * (I_a + I_aqn)) - kappa * I_ss
       dI_smrisn <- kappa * (one - feimr) * I_smr - num * I_smrisn
-      dI_ssrisn <- kappa * (one - feisi-feish) * (I_ssr) - I_ssrisn * ((one -  mu) * nus + mu * nud)
-      dI_smqisn <- I_aq * delta * alpha * epsilonq * (one - feimq) - num * I_smqisn
-      dR        <- (I_a + I_aq + I_aqn + I_ar) * (one - delta) * upsilon + num * (I_smis + I_smisn + I_smqisn + I_smrisn) + (I_ssis + I_ssisn + I_ssh + I_ssrisn) * (one - mu) * nus
-      dD        <- mu * nud * (I_ssis + I_ssisn + I_ssh + I_ssrisn)
+      dI_ssrisn <- (kappa * (one - feisi-feish) * I_ssr) - ((one -  mu) * nus + (mu * nud))* I_ssrisn 
+      dI_smisn  <- kappa * (one -  feim) * I_sm - (num * I_smisn)
+      dI_ssh    <- kappa * feish * (I_ss + I_ssr) + (delta * OneMinusLambda * epsilonq) * I_aq - ((one - mu) * nus + (mu * nud)) * I_ssh
+      dI_ssisn  <- (kappa * ((one - feisi-feish)) * I_ss)  - ((one -  mu) * nus + (mu * nud)) * I_ssisn       
+      dI_smis   <- (delta * alpha * epsilonq * feimq) * I_aq + (kappa * feimr) * I_smr + (kappa * feim) * I_sm  - (num * I_smis)
+      dI_ssis   <- kappa * feisi * (I_ss + I_ssr) -  ((one -  mu) * nus + (mu * nud))* I_ssis     
+      dI_smqisn <- (delta * alpha * epsilonq * (one - feimq))*I_aq - num * I_smqisn
+      dR        <- ((one - delta) * upsilon)*(I_a + I_aq + I_aqn + I_ar) + num * (I_smis + I_smisn + I_smqisn + I_smrisn) + (one - mu) * nus *I_ssss
+      dD        <- mu * nud * I_ssss
       
       out <- eval(parse(text=paste0("c(", paste0("d", paste(names.inits, collapse=", d")),")"))) # out = c(dS, dL, .... , dR, dD)
       
@@ -253,18 +251,11 @@ SEIR.n.Age.Classes <- function( time=NULL, age.parms = NULL, age.age.parms = NUL
   
   return(output)
 }  # END  of function SEIR.n.Age.Classes
-
-
 ################################################################
-
 #        To run the example
-
 ################################################################
-
 # the current example includes 5 age-groups (Ex. 1=under 20 years, 2=20-59, 3=60-69, 4=70-79, 5=80 years or more)
-
 excluded_names <- c("tmin", "tmax","agegrp","cagegrp","ragegrp","isim")
-
 sprintf("S(E)IR model script to estimate the number of COVID-19 cases")
 sprintf("Number of age groups considered: %s", nagegrp)
 sprintf("Components:")
@@ -275,9 +266,7 @@ sprintf("Parameters that change with age and contact with others (age-groups x a
 sprintf( setdiff(colnames(time_stuff_m), excluded_names) )
 sprintf("...Computing ... ")
 
-
 nSim <- max(time_stuff$isim)
-
 listOut <- list()
 previous.tmax <- 0
 
@@ -293,7 +282,6 @@ for(i in seq(1, nSim, 1)){
   
   tt <- seq(0, tmax - tmin, by = 1)
   #tt <- seq(tmin, tmax, by = 1)
-  interval.label<- paste0("interval ",i,":",tmin,"->",tmax )
   
   if(tmin != previous.tmax)
     stop(paste(interval.label , "\n  Interval lower bound not equal to previous interval upper bound"))
@@ -303,11 +291,11 @@ for(i in seq(1, nSim, 1)){
                              age.parms = parameter.by.age,
                              age.age.parms = parameter.by.age.age,
                              list.inits = init_list)
- 
+  
   out <- as.data.frame(out)
   # ode/lsoda Output diagnostic #######################
   #diagn <- diagnostics.deSolve(out)
- 
+  
   out$time <- seq(tmin,tmax,1) #tt
   out_for_init <- out %>%
     slice(nrow(out)) %>%
@@ -318,24 +306,22 @@ for(i in seq(1, nSim, 1)){
   rowns <- names(select(out,-c(time)))
   out <- out %>%
     mutate(N_tot = rowSums(.[rowns]))  # Total number of individuals 
- 
-#updating the initial values  
-#====================================================================
-for(k in 1:length(init_list)){
-  init_list[[k]][1:nagegrp] <- init[seq(nagegrp*(k-1)+1,nagegrp*k)] 
-}
- 
+  
+  #updating the initial values  
+  #====================================================================
+  for(k in 1:length(init_list)){
+    init_list[[k]][1:nagegrp] <- init[seq(nagegrp*(k-1)+1,nagegrp*k)] 
+  }
+  
   # Add outputs to the list
   listOut[[i]] <- out
 }
 
-
 # Merge the data
 big_out <- bind_rows(listOut, .id = "column_label") %>% distinct(time, .keep_all= TRUE)
-
 xx <- yy <- df <- df2 <- NULL
 for (p in 1: nagegrp){
-  varsc<-names(big_out)[grepl(p,names(big_out))]
+  if (nagegrp>1){varsc<-names(big_out)[grepl(p,names(big_out))]}else{varsc<-names(big_out)}
   df <-big_out %>% 
     select(one_of(varsc))
   xx <- df %>%
@@ -350,37 +336,43 @@ for (p in 1: nagegrp){
   varsc<-names(big_out)[grepl(p,names(big_out))]
 }
 
-write.csv(big_out,paste0(WDir,"SEIR_results.csv"), row.names = FALSE)
+write.csv(big_out,paste0(WDir,paste0("SEIR_results_",paste0(nagegrp,"agegrp.csv"))), row.names = FALSE)
 
 #==========================================================================
 #  Graphics 
 #==========================================================================
-
 # Variables of interest for plots
-variables_of_interest <- as.vector(sapply(c("S","L_tot","I_tot","R","D"), function(x) paste0(x, 1:nagegrp)))
-
+if (nagegrp > 1){
+  variables_of_interest <- as.vector(sapply(c("S","L_tot","I_tot","R","D"), function(x) paste0(x, 1:nagegrp)))
+  timelimit <- 365.25
+}else{
+  variables_of_interest <- c("S","L_tot1","I_tot1","R","D")
+  timelimit <- 1500
+}
 big_out_graphs <- big_out %>%
   select(c("time", variables_of_interest)) %>%
-  filter(time < 365.25) # I set a limit of 365.25 days
+  filter(time < timelimit) # I set a limit of days for the graphics
 
-get_plot <- function(data, age_group) {
+
+# Add lookup table for age groups (if nagegrp!=5 or nagegrp=1, please write here the labels)
+if (nagegrp==1){lookup0 <- c("all age groups")}
+if (nagegrp==5){lookup0 <- c("< 20 year-olds", "20- to 59-year-olds", "60- to 69-year-olds", "70-79-year-olds", "80+ year-olds")}
+
+# if needs nagegrp and lookup0
+get_plot <- function(data, age_group,lookup=lookup0) {
   # Subset the data frame to include only the vectors of interest
-  data_subset <- filter(data, meta_key %in% paste0(c("S","L_tot","I_tot","R","D"), age_group))
+  if (nagegrp>1){
+    data_subset <- filter(data, meta_key %in% paste0(c("S","L_tot","I_tot","R","D"), age_group))
+  }else{data_subset <- filter(data, meta_key %in% c("S","L_tot1","I_tot1","R","D"))}
   
   # Refactor the meta_key vector so that levels no longer represented in the vector are removed
   data_subset$meta_key <- factor(data_subset$meta_key)
   
   # Add labels to the factor, which will also appear in the legend
-  data_subset$meta_key <- factor(data_subset$meta_key, levels = rev(levels(data_subset$meta_key)), labels = c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
-  
-  # Add lookup table for age groups
-  lookup <- c("< 20 year-olds", "20- to 59-year-olds", "60- to 69-year-olds", "70-79-year-olds", "80+ year-olds")
-  
-  # Output the plot
-  ggplot(
-    data_subset, 
-    aes(x = time, y = meta_value)
-  ) + 
+  #data_subset$meta_key <- factor(data_subset$meta_key, levels = rev(levels(data_subset$meta_key)), labels = c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
+  data_subset$meta_key <- factor(data_subset$meta_key, levels = levels(data_subset$meta_key), labels = c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
+    # Output the plot
+  ggplot(data_subset, aes(x = time, y = meta_value)) + 
     geom_line(aes(color = meta_key), size = 0.55) +
     ggtitle(paste0("SEIR model, age group ", lookup[age_group])) +
     xlab("Time (days)") +
@@ -394,6 +386,7 @@ get_plot <- function(data, age_group) {
       legend.title = element_blank()
     )
 }
+
 # Reshape SEIR model output from wide to long format
 big_out_long <- gather(big_out_graphs, key = meta_key, value = meta_value, 2:ncol(big_out_graphs), factor_key = TRUE)
 # Create a time series plot for each age group and add it to a list object
@@ -405,7 +398,7 @@ ggarrange(plotlist = plots, ncol = 2, nrow = ceiling(length(plots)/ 2), common.l
 #      
 #     ^^
 #    (oo)     WORK IN PROGRESS......
-#   _(  )_                          checking the results of the last age group...
+#   _(  )_                          
 #     ""
 #
 #################################################################################
