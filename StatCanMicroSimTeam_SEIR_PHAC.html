@@ -1582,7 +1582,7 @@ div.tocify {
 
 <h1 class="title toc-ignore">Modified PHAC S(E)IR model script with n age classes to estimate the number of COVID-19 cases</h1>
 <h4 class="author">Maikol Diasparra, Claude Nadeau and Joel Barnes</h4>
-<h4 class="date">April 08, 2020 10:41:02</h4>
+<h4 class="date">April 08, 2020 14:40:50</h4>
 
 </div>
 
@@ -1799,30 +1799,29 @@ SEIR.n.Age.Classes &lt;- function( time=NULL, age.parms = NULL, age.age.parms = 
       
       # rates of change that depends on matrices
       #--------------------------------------------
-      
-      dS   &lt;- -(BetaC_OneMinusLambda*tau + BetaCqLambda + BetaCrOneMinusLambda*(one - tau))*S*I_sum 
-      dL_r &lt;- ((BetaCrOneMinusLambda *(one-tau))*S*I_sum) - (sigma*L_r)                                       
-      dL_q &lt;- (BetaCqLambda*S*I_sum) - (((sigma*(one - rho)) + (sigma*rho))*L_q)                      
-      dL   &lt;- ((BetaC_OneMinusLambda*tau) *S*I_sum) - (sigma*L)                                          
+      dS   &lt;- -(BetaC_OneMinusLambda * tau + BetaCqLambda + BetaCrOneMinusLambda * (one -  tau) ) * S * I_sum  
+      dL   &lt;- BetaC_OneMinusLambda * tau * S * I_sum - sigma * L
+      dL_q &lt;- BetaCqLambda* S * I_sum - sigma * L_q
+      dL_r &lt;- BetaCrOneMinusLambda * (one -  tau) * S * I_sum - sigma * L_r
       
       # rates of change that depends on vectors
       #--------------------------------------------
-      dI_a      &lt;- sigma*L - I_a*delta*epsilon - I_a*(one -  delta)*upsilon
-      dI_aq     &lt;- sigma*rho*L_q - I_aq*delta*epsilonq - I_aq*(one -  delta)*upsilon 
-      dI_ar     &lt;- sigma*L_r - I_ar*delta*epsilon - I_ar*(one -  delta)*upsilon
-      dI_aqn    &lt;- sigma*(one -  rho)*L_q - I_aqn*delta*epsilon - I_aqn*(one -  delta)*upsilon
-      dI_sm     &lt;- (I_a + I_aqn)*delta*epsilon*alpha - kappa*I_sm 
-      dI_ss     &lt;- (I_a + I_aqn)*delta*epsilon*(one - alpha)    - kappa*I_ss 
-      dI_smr    &lt;- I_ar*delta*epsilon*alpha - kappa*I_smr
-      dI_ssr    &lt;- I_ar*delta*epsilon*(one - alpha)    - kappa*I_ssr 
-      dI_smis   &lt;- kappa*feim*I_sm + kappa*feimr*I_smr + delta*alpha*epsilonq*feimq*I_aq - num*I_smis
-      dI_smisn  &lt;- kappa*(one -  feim)*I_sm - num*I_smisn
-      dI_ssis   &lt;- kappa*feisi*(I_ss + I_ssr) - I_ssis*((one -  mu)*nus + mu*nud)
-      dI_ssisn  &lt;- kappa*((one - feisi-feish)*I_ss)  - I_ssisn*((one -  mu)*nus + mu*nud) 
-      dI_ssh    &lt;- kappa*feish*(I_ss + I_ssr) + delta*(one-alpha)*epsilonq*I_aq - I_ssh*((one - mu)*nus + mu*nud) 
-      dI_smrisn &lt;- kappa*(one - feimr)*I_smr - num*I_smrisn
-      dI_ssrisn &lt;- kappa*(one - feisi-feish)*(I_ssr) - I_ssrisn*((one -  mu)*nus + mu*nud)
-      dI_smqisn &lt;- I_aq*delta*alpha*epsilonq*(one - feimq) - num*I_smqisn
+      dI_a      &lt;- sigma * L - I_a * delta * epsilon - I_a * (one -  delta) * upsilon
+      dI_aq     &lt;- sigma * rho * L_q - I_aq * delta * epsilonq - I_aq * (one -  delta) * upsilon 
+      dI_ar     &lt;- sigma * L_r - I_ar * delta * epsilon - I_ar * (one -  delta) * upsilon
+      dI_aqn    &lt;- sigma * (one -  rho) * L_q - I_aqn * delta * epsilon - I_aqn * (one -  delta) * upsilon
+      dI_sm     &lt;- (I_a + I_aqn) * delta * epsilon * alpha - kappa * I_sm 
+      dI_ss     &lt;- (I_a + I_aqn) * delta * epsilon * (one - alpha)    - kappa * I_ss  
+      dI_smr    &lt;- I_ar * delta * epsilon * alpha - kappa * I_smr
+      dI_ssr    &lt;- I_ar * delta * epsilon * (one - alpha)    - kappa * I_ssr 
+      dI_smis   &lt;- kappa * feim * I_sm + kappa * feimr * I_smr + delta * alpha * epsilonq * feimq * I_aq - num * I_smis
+      dI_smisn  &lt;- kappa * (one -  feim) * I_sm - num * I_smisn
+      dI_ssis   &lt;- kappa * feisi * (I_ss + I_ssr) - I_ssis * ((one -  mu) * nus + mu * nud)
+      dI_ssisn  &lt;- kappa * ((one - feisi-feish) * I_ss)  - I_ssisn * ((one -  mu) * nus + mu * nud) 
+      dI_ssh    &lt;- kappa * feish * (I_ss + I_ssr) + delta * (one-alpha) * epsilonq * I_aq - I_ssh * ((one - mu) * nus + mu * nud) 
+      dI_smrisn &lt;- kappa * (one - feimr) * I_smr - num * I_smrisn
+      dI_ssrisn &lt;- kappa * (one - feisi-feish) * (I_ssr) - I_ssrisn * ((one -  mu) * nus + mu * nud)
+      dI_smqisn &lt;- I_aq * delta * alpha * epsilonq * (one - feimq) - num * I_smqisn
       dR        &lt;- (I_a + I_aq + I_aqn + I_ar)*(one - delta)*upsilon + num*(I_smis + I_smisn + I_smqisn + I_smrisn) + (one - mu)*nus*I_ssss
       dD        &lt;- mu*nud*I_ssss
       
@@ -1940,7 +1939,12 @@ for (p in 1: nagegrp){
   varsc&lt;-names(big_out)[grepl(p,names(big_out))]
 }
 
-write.csv(big_out,paste0(WDir,paste0(&quot;SEIR_results_&quot;,paste0(nagegrp,&quot;agegrp.csv&quot;))), row.names = FALSE)</code></pre>
+write.csv(big_out,paste0(WDir,paste0(&quot;SEIR_results_&quot;,paste0(nagegrp,&quot;agegrp.csv&quot;))), row.names = FALSE)
+
+# Checking the results 
+Cond_1&lt;-table(big_out&lt;0)[&quot;TRUE&quot;]
+if(is.na(Cond_1)==FALSE){print(&quot;Warning: At least one value is negative&quot;)}
+if(abs(big_out$N_tot[dim(big_out)[1]]-big_out$N_tot[1])&gt;10**(-6)){print(&quot;Warning: the total number of individuals in the system has changed over time&quot;)}</code></pre>
 </div>
 <div id="output" class="section level1">
 <h1><span class="header-section-number">2</span> Output</h1>
