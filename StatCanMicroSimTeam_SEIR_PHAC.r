@@ -111,7 +111,7 @@ source("UtilitiesChunks.R")
 file_name <- "input_sheet_5agegrp.xls"  #file with five age groups
 #file_name <- "input_sheet_1agegrp.xls" #file with one age group
 
-time_stuff   <- as.data.frame.from.tbl( readxl::read_excel(paste(WDir,file_name,sep=""),sheet = "time") )   # other parameters
+time_stuff   <- as.data.frame.from.tbl( readxl::read_excel(paste(WDir,file_name,sep=""), sheet = "time") )  # other parameters
 time_stuff_m <- as.data.frame.from.tbl( readxl::read_excel(paste(WDir,file_name,sep=""), sheet = "time2") ) # c_, cr, cq, and beta
 input_stuff  <- as.data.frame.from.tbl( readxl::read_excel(paste(WDir,file_name,sep=""), sheet = "input") ) # initial values
 
@@ -198,30 +198,29 @@ SEIR.n.Age.Classes <- function( time=NULL, age.parms = NULL, age.age.parms = NUL
       
       # rates of change that depends on matrices
       #--------------------------------------------
-      
-      dS   <- -(BetaC_OneMinusLambda*tau + BetaCqLambda + BetaCrOneMinusLambda*(one - tau))*S*I_sum # updated
-      dL_r <- ((BetaCrOneMinusLambda *(one-tau))*S*I_sum) - (sigma*L_r)                                       
-      dL_q <- (BetaCqLambda*S*I_sum) - (((sigma*(one - rho)) + (sigma*rho))*L_q)                      
-      dL   <- ((BetaC_OneMinusLambda*tau) *S*I_sum) - (sigma*L)                                          
+      dS   <- -(BetaC_OneMinusLambda * tau + BetaCqLambda + BetaCrOneMinusLambda * (one -  tau) ) * S * I_sum  # updated 
+      dL   <- BetaC_OneMinusLambda * tau * S * I_sum - sigma * L
+      dL_q <- BetaCqLambda* S * I_sum - sigma * L_q
+      dL_r <- BetaCrOneMinusLambda * (one -  tau) * S * I_sum - sigma * L_r
       
       # rates of change that depends on vectors
       #--------------------------------------------
-      dI_a      <- sigma*L - I_a*delta*epsilon - I_a*(one -  delta)*upsilon
-      dI_aq     <- sigma*rho*L_q - I_aq*delta*epsilonq - I_aq*(one -  delta)*upsilon # updated
-      dI_ar     <- sigma*L_r - I_ar*delta*epsilon - I_ar*(one -  delta)*upsilon
-      dI_aqn    <- sigma*(one -  rho)*L_q - I_aqn*delta*epsilon - I_aqn*(one -  delta)*upsilon
-      dI_sm     <- (I_a + I_aqn)*delta*epsilon*alpha - kappa*I_sm 
-      dI_ss     <- (I_a + I_aqn)*delta*epsilon*(one - alpha)    - kappa*I_ss # updated
-      dI_smr    <- I_ar*delta*epsilon*alpha - kappa*I_smr
-      dI_ssr    <- I_ar*delta*epsilon*(one - alpha)    - kappa*I_ssr # updated
-      dI_smis   <- kappa*feim*I_sm + kappa*feimr*I_smr + delta*alpha*epsilonq*feimq*I_aq - num*I_smis
-      dI_smisn  <- kappa*(one -  feim)*I_sm - num*I_smisn
-      dI_ssis   <- kappa*feisi*(I_ss + I_ssr) - I_ssis*((one -  mu)*nus + mu*nud)
-      dI_ssisn  <- kappa*((one - feisi-feish)*I_ss)  - I_ssisn*((one -  mu)*nus + mu*nud) 
-      dI_ssh    <- kappa*feish*(I_ss + I_ssr) + delta*(one-alpha)*epsilonq*I_aq - I_ssh*((one - mu)*nus + mu*nud) # updated
-      dI_smrisn <- kappa*(one - feimr)*I_smr - num*I_smrisn
-      dI_ssrisn <- kappa*(one - feisi-feish)*(I_ssr) - I_ssrisn*((one -  mu)*nus + mu*nud)
-      dI_smqisn <- I_aq*delta*alpha*epsilonq*(one - feimq) - num*I_smqisn
+      dI_a      <- sigma * L - I_a * delta * epsilon - I_a * (one -  delta) * upsilon
+      dI_aq     <- sigma * rho * L_q - I_aq * delta * epsilonq - I_aq * (one -  delta) * upsilon # updated 
+      dI_ar     <- sigma * L_r - I_ar * delta * epsilon - I_ar * (one -  delta) * upsilon
+      dI_aqn    <- sigma * (one -  rho) * L_q - I_aqn * delta * epsilon - I_aqn * (one -  delta) * upsilon
+      dI_sm     <- (I_a + I_aqn) * delta * epsilon * alpha - kappa * I_sm 
+      dI_ss     <- (I_a + I_aqn) * delta * epsilon * (one - alpha)    - kappa * I_ss # updated 
+      dI_smr    <- I_ar * delta * epsilon * alpha - kappa * I_smr
+      dI_ssr    <- I_ar * delta * epsilon * (one - alpha)    - kappa * I_ssr # updated 
+      dI_smis   <- kappa * feim * I_sm + kappa * feimr * I_smr + delta * alpha * epsilonq * feimq * I_aq - num * I_smis
+      dI_smisn  <- kappa * (one -  feim) * I_sm - num * I_smisn
+      dI_ssis   <- kappa * feisi * (I_ss + I_ssr) - I_ssis * ((one -  mu) * nus + mu * nud)
+      dI_ssisn  <- kappa * ((one - feisi-feish) * I_ss)  - I_ssisn * ((one -  mu) * nus + mu * nud) 
+      dI_ssh    <- kappa * feish * (I_ss + I_ssr) + delta * (one-alpha) * epsilonq * I_aq - I_ssh * ((one - mu) * nus + mu * nud) # updated 
+      dI_smrisn <- kappa * (one - feimr) * I_smr - num * I_smrisn
+      dI_ssrisn <- kappa * (one - feisi-feish) * (I_ssr) - I_ssrisn * ((one -  mu) * nus + mu * nud)
+      dI_smqisn <- I_aq * delta * alpha * epsilonq * (one - feimq) - num * I_smqisn
       dR        <- (I_a + I_aq + I_aqn + I_ar)*(one - delta)*upsilon + num*(I_smis + I_smisn + I_smqisn + I_smrisn) + (one - mu)*nus*I_ssss
       dD        <- mu*nud*I_ssss
       
@@ -262,6 +261,7 @@ sprintf("...Computing ... ")
 nSim <- max(time_stuff$isim)
 listOut <- list()
 previous.tmax <- 0
+out<-NULL
 
 for(i in seq(1, nSim, 1)){
   parameter.by.age     <- subset(time_stuff  , isim == i)
@@ -306,6 +306,7 @@ for(i in seq(1, nSim, 1)){
   listOut[[i]] <- out
 }
 
+
 # Merge the data
 big_out <- bind_rows(listOut, .id = "column_label") %>% distinct(time, .keep_all= TRUE)
 xx <- yy <- df <- df2 <- NULL
@@ -326,6 +327,11 @@ for (p in 1: nagegrp){
 }
 
 write.csv(big_out,paste0(WDir,paste0("SEIR_results_",paste0(nagegrp,"agegrp.csv"))), row.names = FALSE)
+
+# Checking the results 
+Cond_1<-table(big_out<0)["TRUE"]
+if(is.na(Cond_1)==FALSE){print("Warning: At least one value is negative")}
+if(abs(big_out$N_tot[dim(big_out)[1]]-big_out$N_tot[1])>10**(-6)){print("Warning: the total number of individuals in the system has changed over time")}
 
 #==========================================================================
 #  Graphics 
