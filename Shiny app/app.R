@@ -12,7 +12,7 @@ ui <- fluidPage(
   titlePanel("SEIR model app"),
   fluidRow(
     column(6, fileInput("file", "Please upload your model parameters (Excel file)", width = "500px")),
-    column(6, uiOutput("age_group"))
+    column(6, uiOutput("age_group", width = "500px"))
   ),
   tabsetPanel(
     tabPanel("Plot", br(), plotlyOutput("plot") %>% withSpinner(color = "#337ab7")),
@@ -27,7 +27,7 @@ server <- function(input, output) {
       return() 
     } else {
       age_groups <- 1:run_model()$nagegrp
-      radioButtons('age_group', 'Please select an age group', choiceNames = paste0("Age group ", age_groups), choiceValues = age_groups, selected = character(0))
+      radioButtons('age_group', paste0("Please select one of the ", run_model()$nagegrp, " age groups detected."), choiceNames = paste0("Age group ", age_groups), choiceValues = age_groups, selected = character(0))
     }
   })
   
@@ -291,9 +291,17 @@ server <- function(input, output) {
         # Add labels to the factor, which will also appear in the legend
         #data_subset$meta_key <- factor(data_subset$meta_key, levels = rev(levels(data_subset$meta_key)), labels = c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
         data_subset$meta_key <- factor(data_subset$meta_key, levels = levels(data_subset$meta_key), labels = c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
+        
+        names(data_subset) <- c("Day", "Compartment", "Count")
+        data_subset$Count <- as.integer(data_subset$Count)
+        
+        todays_date <- as.Date("03/13/20", "%m/%d/%y")
+        data_subset$Date <- todays_date + data_subset$Day
+        #data_subset$Date <- format(data_subset$Date, "%b %d")
+          
         # Output the plot
-        p <- ggplot(data_subset, aes(x = time, y = meta_value)) +
-          geom_line(aes(color = meta_key), size = 0.85) +
+        p <- ggplot(data_subset, aes(x = Day, y = Count)) +
+          geom_line(aes(color = Compartment), size = 0.85) +
           ggtitle(paste0("SEIR model, age group ", age_group)) +
           xlab("Time (days)") +
           ylab("N (individuals)") +
@@ -325,7 +333,7 @@ server <- function(input, output) {
     extensions = c("Buttons", "Scroller"), 
     rownames = FALSE,
     options = list(
-      columnDefs = list(list(visible = FALSE, targets = c(1))),
+      columnDefs = list(list(visible = FALSE, targets = c())),
       pageLength = 50, 
       dom = "Bfrtip", 
       buttons = c("colvis", "copy", "csv", "excel", "pdf"), 
