@@ -1,36 +1,142 @@
-package_names <- c("janitor","readxl","dplyr","deSolve","tidyr","ggplot2", "ggpubr", "tidyverse", "viridis", "shinycssloaders", "DT", "scales", "plotly") 
-load_packages <- lapply(package_names, require, character.only = TRUE)
+# Load packages to extend base R
+
+
+required_Packages <-c("janitor","readxl","dplyr","deSolve","tidyr","ggplot2", "ggpubr", "tidyverse", "viridis", "shinycssloaders", "DT", "scales", "plotly","matrixcalc")
+for(p in required_Packages){
+  if(!require(p,character.only = TRUE)) {install.packages(p)}
+}
+load_packages <- lapply(required_Packages, require, character.only = TRUE)
 
 # Define UI
 ui <- fluidPage(
-  # Application title
+  # Add CSS here
   tags$head(
     tags$style(HTML("
       // CSS goes here
     "))
   ),
-  titlePanel("SEIR model app"),
-  fluidRow(
-    column(6, fileInput("file", "Please upload your model parameters (Excel file)")),
-    column(6, uiOutput("age_group", width = "500px"))
-  ),
-  tabsetPanel(
-    tabPanel("Plot", br(), plotlyOutput("plot") %>% withSpinner(color = "#337ab7")),
-    tabPanel("Model output", br(), DTOutput("table") %>% withSpinner(color = "#337ab7"))
+  # Application title
+  titlePanel("COVID-19 model app"),
+  
+  # Layout
+  sidebarLayout(
+    sidebarPanel(
+      fileInput("file", "Upload model parameters (Excel file)"),
+      uiOutput("age_group"),
+      uiOutput("compartment"),
+      uiOutput("start_date"),
+      width = 3
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Plot", br(), plotlyOutput("plot") %>% withSpinner(color = "#337ab7")),
+        tabPanel("Summary statistics", br(), DTOutput("summary_statistics") %>% withSpinner(color = "#337ab7")),
+        tabPanel("Model output", br(), DTOutput("model_output") %>% withSpinner(color = "#337ab7")),
+        tabPanel("Model input (time)", br(), DTOutput("model_inputs_time1") %>% withSpinner(color = "#337ab7")),
+        tabPanel("Model input (time2)", br(), DTOutput("model_inputs_time2") %>% withSpinner(color = "#337ab7")),
+        tabPanel("Model input (inputs)", br(), DTOutput("model_inputs") %>% withSpinner(color = "#337ab7"))
+      ),
+      width = 9
+    )
   )
 )
 
 # Define server logic 
 server <- function(input, output) {
+  
+  # Build age group menu based on the number of age groups detected in the uploaded Excel file
   output$age_group <- renderUI({
     if(is.null(run_model()$nagegrp)) { 
       return() 
     } else {
       age_groups <- 1:run_model()$nagegrp
-      radioButtons('age_group', paste0("Please select one of the ", run_model()$nagegrp, " age groups detected."), choiceNames = paste0("Age group ", age_groups), choiceValues = age_groups, selected = character(0))
+      names(age_groups) <- paste0("Age group ", age_groups)
+      selectInput("age_group", "Select age group", choices = age_groups)
     }
   })
   
+  # Build compartment menu
+  output$compartment <- renderUI({
+    if(is.null(run_model()$nagegrp)) { 
+      return() 
+    } else {
+      checkboxGroupInput("compartment", label = "Select compartments", choices = list("Susceptible" = "S", "Latent" = "L_tot", "Infected" = "I_tot", "Recovered" = "R", "Dead" = "D"), selected = c("S", "L_tot", "I_tot", "R", "D"))
+    }
+  })
+  
+  # Build start date field
+  output$start_date <- renderUI({
+    if(is.null(run_model()$nagegrp)) { 
+      return() 
+    } else {
+      dateInput("start_date", "Select start date (for Time = 0)", value="")
+    }
+  })
+  
+  # Read sheets from uploaded Excel file
+  get_inputs <- reactive({
+    file_to_read <- input$file
+    if(is.null(file_to_read)) {
+      return(list(time1 = data.frame(), time2 = data.frame(), inputs = data.frame(), columns = NULL))
+    } else {
+      time_stuff   <- as.data.frame.from.tbl( readxl::read_excel(file_to_read$datapath, sheet = "time") )  # other parameters
+      time_stuff_m <- as.data.frame.from.tbl( readxl::read_excel(file_to_read$datapath, sheet = "time2") ) # c_, cr, cq, and beta
+      input_stuff  <- as.data.frame.from.tbl( readxl::read_excel(file_to_read$datapath, sheet = "input") ) # initial values
+      return(list(time1 = time_stuff, time2 = time_stuff_m, inputs = input_stuff))
+    }
+  })
+  
+  # Compute summary statistics based on the age group and compartment(s) selected with Time converted to YYYY-mm-dd if the start date field is populated
+  get_statistics <- reactive({
+    if(nrow(run_model()$big_out) < 1) {
+      return()
+    } else {
+      # Function to compute min counts 
+      get_min_count <- function(df, variable_of_interest) {
+        df <- df %>% filter(Time < 365.25) %>% filter(!!rlang::sym(all_of(variable_of_interest)) == min(!!rlang::sym(all_of(variable_of_interest)))) %>% select(Time, all_of(variable_of_interest))
+        start_date <- paste0("|", input$start_date, collapse = "")
+        if(nchar(gsub("[|]", "", start_date)) == 10) {
+          start_date <- as.Date(gsub("[|]", "", start_date), format = "%Y-%m-%d")
+          df$Time <- as.character(start_date + df$Time)
+        }
+        df <- tibble(Compartment = names(df)[2], Min = as.integer(df[,2]), Day = df$Time)
+      }
+      
+      # Function to compute max counts
+      get_max_count <- function(df, variable_of_interest) {
+        df <- df %>% filter(Time < 365.25) %>% filter(!!rlang::sym(variable_of_interest) == max(!!rlang::sym(variable_of_interest))) %>% select(Time, variable_of_interest)
+        start_date <- paste0("|", input$start_date, collapse = "")
+        if(nchar(gsub("[|]", "", start_date)) == 10) {
+          start_date <- as.Date(gsub("[|]", "", start_date), format = "%Y-%m-%d")
+          df$Time <- as.character(start_date + df$Time)
+        }
+        df <- tibble(Compartment = names(df)[2], Max = as.integer(df[,2]), Day = df$Time)
+      }
+      
+      # Data frame with min stats
+      df1 <- as.data.frame(t(sapply(paste0(input$compartment, input$age_group), function(x) get_min_count(run_model()$big_out, x))))
+      for(i in 1:ncol(df1)) {
+        df1[,i] <- unname(unlist(df1[,i]))
+      }
+      
+      # Data frame with max stats
+      df2 <- as.data.frame(t(sapply(paste0(input$compartment, input$age_group), function(x) get_max_count(run_model()$big_out, x))))
+      for(i in 1:ncol(df2)) {
+        df2[,i] <- unname(unlist(df2[,i]))
+      }
+      
+      # Merge min and max data frames
+      df <- cbind(df1, df2 %>% select(-Compartment))
+      
+      # Convert variable names to long form
+      lookup <- tibble(short = c("S", "L_tot", "I_tot", "R", "D"), long = c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
+      df$Compartment <- lookup$long[match(gsub('[0-9]+', '', df$Compartment), lookup$short)]
+      
+      return(list(df = df))
+    }
+  })
+  
+  # Run SEIR model by age groups
   run_model <- reactive({
     # generate bins based on input$bins from ui.R
     file_to_read <- input$file
@@ -38,9 +144,9 @@ server <- function(input, output) {
       return(list(big_out = data.frame(), nagegrp = NULL, columns = NULL))
     } else {
       source("UtilitiesChunks.R") 
-      time_stuff   <- as.data.frame.from.tbl( readxl::read_excel(file_to_read$datapath, sheet = "time") )  # other parameters
-      time_stuff_m <- as.data.frame.from.tbl( readxl::read_excel(file_to_read$datapath, sheet = "time2") ) # c_, cr, cq, and beta
-      input_stuff  <- as.data.frame.from.tbl( readxl::read_excel(file_to_read$datapath, sheet = "input") ) # initial values
+      time_stuff   <- get_inputs()$time1
+      time_stuff_m <- get_inputs()$time2
+      input_stuff  <- get_inputs()$inputs
       
       nagegrp <- length(unique(time_stuff$agegrp))        # number of age groups
       
@@ -62,6 +168,7 @@ server <- function(input, output) {
       for(k in input_stuff$NAME){
         init_list[[k]] <- as.matrix( subset(input_stuff, NAME == k)[,input_stuff_age_columns] )
       }
+      
       #==========================================================================
       #  Main routine
       #==========================================================================
@@ -110,45 +217,47 @@ server <- function(input, output) {
           }
           
           with(as.list(c(list.inits, list.parms)),{
+            # check the symmetry condition
+            if(isSymmetric(beta,check.attributes=FALSE)==FALSE){stop("beta is not a symmetric matrix")}
+            if(isSymmetric(c_,check.attributes=FALSE)==FALSE){stop("c_ is not a symmetric matrix")}
+            if(isSymmetric(cq,check.attributes=FALSE)==FALSE){stop("cq is not a symmetric matrix")}
+            if(isSymmetric(cr,check.attributes=FALSE)==FALSE){stop("cr is not a symmetric matrix")}
             
             I_sum <- I_a + I_aqn + I_sm + I_ss + I_smisn + I_ssisn + I_ar + I_smr + I_ssr + I_smrisn + I_ssrisn + phi*I_aq
             I_ssss <- I_ssis + I_ssisn + I_ssh + I_ssrisn
-            BetaCrOneMinusLambda <- BetaC_OneMinusLambda <- BetaCqLambda <- C_OneMinusLambda <- CqLambda <-  CrOneMinusLambda <- CqLambda <- one <- as.matrix(rep(1,nage))
+            c_BetaIprop <- CrBetaIprop <- CqBetaIprop <- C_OneMinusLambda <- one <- as.matrix(rep(1,nage))
             
-            OneMinusLambda       <-    (one - lambda)
-            C_OneMinusLambda     <- c_ %*% OneMinusLambda          
-            CrOneMinusLambda     <- cr %*% OneMinusLambda          
-            CqLambda             <- cq %*% OneMinusLambda          
-            BetaCrOneMinusLambda <- beta %*% CrOneMinusLambda  
-            BetaC_OneMinusLambda <- beta %*% C_OneMinusLambda  
-            BetaCqLambda         <- beta %*% CqLambda          
+            OneMinusLambda      <- (one - lambda)
+            c_BetaIprop         <- hadamard.prod(c_,beta) %*% I_sum          
+            CqBetaIprop         <- hadamard.prod(cq,beta) %*% I_sum         
+            CrBetaIprop         <- hadamard.prod(cr,beta) %*% I_sum          
             
-            # rates of change that depends on matrices
+            
+            # rates of change that depends on matrices 
             #--------------------------------------------
-            
-            dS   <- -(BetaC_OneMinusLambda*tau + BetaCqLambda + BetaCrOneMinusLambda*(one - tau))*S*I_sum # updated
-            dL_r <- ((BetaCrOneMinusLambda *(one-tau))*S*I_sum) - (sigma*L_r)                                       
-            dL_q <- (BetaCqLambda*S*I_sum) - (((sigma*(one - rho)) + (sigma*rho))*L_q)                      
-            dL   <- ((BetaC_OneMinusLambda*tau) *S*I_sum) - (sigma*L)                                          
+            dS   <- -((OneMinusLambda * tau * c_BetaIprop) + (lambda * CqBetaIprop) + (OneMinusLambda * (one-tau) * CrBetaIprop)) * S #new formula
+            dL   <- (OneMinusLambda * tau * c_BetaIprop) * S  - sigma * L                                                             #new formula
+            dL_q <- (lambda * CqBetaIprop) * S  - sigma * L_q                                                                         #new formula
+            dL_r <- (OneMinusLambda * (one-tau) * CrBetaIprop) * S  - sigma * L_r                                                     #new formula
             
             # rates of change that depends on vectors
             #--------------------------------------------
-            dI_a      <- sigma*L - I_a*delta*epsilon - I_a*(one -  delta)*upsilon
-            dI_aq     <- sigma*rho*L_q - I_aq*delta*epsilonq - I_aq*(one -  delta)*upsilon # updated
-            dI_ar     <- sigma*L_r - I_ar*delta*epsilon - I_ar*(one -  delta)*upsilon
-            dI_aqn    <- sigma*(one -  rho)*L_q - I_aqn*delta*epsilon - I_aqn*(one -  delta)*upsilon
-            dI_sm     <- (I_a + I_aqn)*delta*epsilon*alpha - kappa*I_sm 
-            dI_ss     <- (I_a + I_aqn)*delta*epsilon*(one - alpha)    - kappa*I_ss # updated
-            dI_smr    <- I_ar*delta*epsilon*alpha - kappa*I_smr
-            dI_ssr    <- I_ar*delta*epsilon*(one - alpha)    - kappa*I_ssr # updated
-            dI_smis   <- kappa*feim*I_sm + kappa*feimr*I_smr + delta*alpha*epsilonq*feimq*I_aq - num*I_smis
-            dI_smisn  <- kappa*(one -  feim)*I_sm - num*I_smisn
-            dI_ssis   <- kappa*feisi*(I_ss + I_ssr) - I_ssis*((one -  mu)*nus + mu*nud)
-            dI_ssisn  <- kappa*((one - feisi-feish)*I_ss)  - I_ssisn*((one -  mu)*nus + mu*nud) 
-            dI_ssh    <- kappa*feish*(I_ss + I_ssr) + delta*(one-alpha)*epsilonq*I_aq - I_ssh*((one - mu)*nus + mu*nud) # updated
-            dI_smrisn <- kappa*(one - feimr)*I_smr - num*I_smrisn
-            dI_ssrisn <- kappa*(one - feisi-feish)*(I_ssr) - I_ssrisn*((one -  mu)*nus + mu*nud)
-            dI_smqisn <- I_aq*delta*alpha*epsilonq*(one - feimq) - num*I_smqisn
+            dI_a      <- sigma * L - I_a * delta * epsilon - I_a * (one -  delta) * upsilon
+            dI_aq     <- sigma * rho * L_q - I_aq * delta * epsilonq - I_aq * (one -  delta) * upsilon # updated 
+            dI_ar     <- sigma * L_r - I_ar * delta * epsilon - I_ar * (one -  delta) * upsilon
+            dI_aqn    <- sigma * (one -  rho) * L_q - I_aqn * delta * epsilon - I_aqn * (one -  delta) * upsilon
+            dI_sm     <- (I_a + I_aqn) * delta * epsilon * alpha - kappa * I_sm 
+            dI_ss     <- (I_a + I_aqn) * delta * epsilon * (one - alpha)    - kappa * I_ss # updated 
+            dI_smr    <- I_ar * delta * epsilon * alpha - kappa * I_smr
+            dI_ssr    <- I_ar * delta * epsilon * (one - alpha)    - kappa * I_ssr # updated 
+            dI_smis   <- kappa * feim * I_sm + kappa * feimr * I_smr + delta * alpha * epsilonq * feimq * I_aq - num * I_smis
+            dI_smisn  <- kappa * (one -  feim) * I_sm - num * I_smisn
+            dI_ssis   <- kappa * feisi * (I_ss + I_ssr) - I_ssis * ((one -  mu) * nus + mu * nud)
+            dI_ssisn  <- kappa * ((one - feisi-feish) * I_ss)  - I_ssisn * ((one -  mu) * nus + mu * nud) 
+            dI_ssh    <- kappa * feish * (I_ss + I_ssr) + delta * (one-alpha) * epsilonq * I_aq - I_ssh * ((one - mu) * nus + mu * nud) # updated 
+            dI_smrisn <- kappa * (one - feimr) * I_smr - num * I_smrisn
+            dI_ssrisn <- kappa * (one - feisi-feish) * (I_ssr) - I_ssrisn * ((one -  mu) * nus + mu * nud)
+            dI_smqisn <- I_aq * delta * alpha * epsilonq * (one - feimq) - num * I_smqisn
             dR        <- (I_a + I_aq + I_aqn + I_ar)*(one - delta)*upsilon + num*(I_smis + I_smisn + I_smqisn + I_smrisn) + (one - mu)*nus*I_ssss
             dD        <- mu*nud*I_ssss
             
@@ -189,6 +298,7 @@ server <- function(input, output) {
       nSim <- max(time_stuff$isim)
       listOut <- list()
       previous.tmax <- 0
+      out<-NULL
       
       for(i in seq(1, nSim, 1)){
         parameter.by.age     <- subset(time_stuff  , isim == i)
@@ -233,6 +343,7 @@ server <- function(input, output) {
         listOut[[i]] <- out
       }
       
+      
       # Merge the data
       big_out <- bind_rows(listOut, .id = "column_label") %>% distinct(time, .keep_all= TRUE)
       xx <- yy <- df <- df2 <- NULL
@@ -251,60 +362,69 @@ server <- function(input, output) {
         names(big_out)[c(dim(big_out)[2]-1,dim(big_out)[2])]<-c(paste0(c("L_tot","I_tot"),p))
         varsc<-names(big_out)[grepl(p,names(big_out))]
       }
-      return(list(big_out = big_out[,-1], nagegrp = nagegrp))
+      big_out <- big_out %>% select(order(colnames(big_out))) %>% select(time, everything())
+      colnames(big_out)[1] <- "Time"
+      return(list(big_out = big_out, nagegrp = nagegrp))
     }
   })
   
+  # Build line plot based on the age group and compartment(s) selected with Time converted to YYYY-mm-dd if the start date field is populated
   output$plot <- renderPlotly({
     # generate bins based on input$bins from ui.R
-    if(nrow(run_model()$big_out) < 1 | is.null(input$age_group)) {
+    if(nrow(run_model()$big_out) < 1 | is.null(input$age_group) | is.null(input$compartment)) {
       return()
     } else {
       big_out <- run_model()$big_out
       nagegrp <- run_model()$nagegrp
       if (nagegrp > 1){
-        variables_of_interest <- as.vector(sapply(c("S","L_tot","I_tot","R","D"), function(x) paste0(x, input$age_group)))
+        #variables_of_interest <- as.vector(sapply(c("S","L_tot","I_tot","R","D"), function(x) paste0(x, input$age_group)))
+        variables_of_interest <- as.vector(sapply(input$compartment, function(x) paste0(x, input$age_group)))
         timelimit <- 365.25
-      }else{
-        variables_of_interest <- c("S","L_tot1","I_tot1","R","D")
+      } else {
+        #variables_of_interest <- c("S","L_tot1","I_tot1","R","D")
+        variables_of_interest <- input$compartment
+        variables_of_interest <- gsub("L_tot", "L_tot1", variables_of_interest)
+        variables_of_interest <- gsub("I_tot", "I_tot1", variables_of_interest)
         timelimit <- 1500
       }
       big_out_graphs <- big_out %>%
-        select(c("time", variables_of_interest)) %>%
-        filter(time < timelimit) # I set a limit of days for the graphics
-      
-      
-      # Add lookup table for age groups (if nagegrp!=5 or nagegrp=1, please write here the labels)
-      #if (nagegrp==1){lookup0 <- c("all age groups")}
-      #if (nagegrp==5){lookup0 <- c("< 20 year-olds", "20- to 59-year-olds", "60- to 69-year-olds", "70-79-year-olds", "80+ year-olds")}
+        select(c("Time", all_of(variables_of_interest))) %>%
+        filter(Time < timelimit) # I set a limit of days for the graphics
       
       # if needs nagegrp and lookup0
       get_plot <- function(data, age_group) {
         # Subset the data frame to include only the vectors of interest
-        if (nagegrp>1){
+        if (nagegrp > 1) {
           data_subset <- filter(data, meta_key %in% paste0(c("S","L_tot","I_tot","R","D"), age_group))
-        }else{data_subset <- filter(data, meta_key %in% c("S","L_tot1","I_tot1","R","D"))}
+        } else {
+          data_subset <- filter(data, meta_key %in% c("S","L_tot1","I_tot1","R","D"))
+        }
         
         # Refactor the meta_key vector so that levels no longer represented in the vector are removed
         data_subset$meta_key <- factor(data_subset$meta_key)
         
         # Add labels to the factor, which will also appear in the legend
-        #data_subset$meta_key <- factor(data_subset$meta_key, levels = rev(levels(data_subset$meta_key)), labels = c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
-        data_subset$meta_key <- factor(data_subset$meta_key, levels = levels(data_subset$meta_key), labels = c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
+        lookup <- tibble(short = c("S", "L_tot", "I_tot", "R", "D"), long = c("Susceptible", "Latent", "Infected", "Recovered", "Dead"))
+        data_subset$meta_key <- factor(data_subset$meta_key, levels = levels(data_subset$meta_key), labels = lookup$long[match(gsub('[0-9]+', '', variables_of_interest), lookup$short)])
         
-        names(data_subset) <- c("Day", "Compartment", "Count")
-        data_subset$Count <- as.integer(data_subset$Count)
+        names(data_subset) <- c("Day", "Compartment", "Individuals")
+        data_subset$Individuals <- as.integer(data_subset$Individuals)
         
-        todays_date <- as.Date("03/13/20", "%m/%d/%y")
-        data_subset$Date <- todays_date + data_subset$Day
-        #data_subset$Date <- format(data_subset$Date, "%b %d")
+        start_date <- paste0("|", input$start_date, collapse = "")
+        if(nchar(gsub("[|]", "", start_date)) == 10) {
+          start_date <- as.Date(gsub("[|]", "", start_date), format = "%Y-%m-%d")
+          data_subset$Day <- start_date + data_subset$Day
+          x_lab_label <- paste0("Time (since ", format(start_date, format = "%B %d, %Y"), ")")
+        } else {
+          x_lab_label = "Time (days)"
+        }
         
         # Output the plot
-          p <- ggplot(data_subset, aes(x = Day, y = Count)) +
+        p <- ggplot(data_subset, aes(x = Day, y = Individuals)) +
           geom_line(aes(color = Compartment), size = 0.85) +
           ggtitle(paste0("SEIR model, age group ", age_group)) +
-          xlab("Time (days)") +
-          ylab("N (individuals)") +
+          xlab(x_lab_label) +
+          ylab("Count (individuals)") +
           scale_y_continuous(labels = comma) +
           theme_minimal() +
           theme(
@@ -319,22 +439,100 @@ server <- function(input, output) {
       
       # Reshape SEIR model output from wide to long format
       big_out_long <- gather(big_out_graphs, key = meta_key, value = meta_value, 2:ncol(big_out_graphs), factor_key = TRUE)
-      # Create a time series plot for each age group and add it to a list object
-      #plots <- lapply(1:nagegrp, FUN = get_plot, data = big_out_long)
       
       # Output the plots in a panel
-      #print(ggarrange(plotlist = ggplotly(plots), ncol = 2, nrow = ceiling(length(plots)/ 2), common.legend = TRUE))
       get_plot(big_out_long, input$age_group)
     }
   })
   
-  output$table = renderDT(
-    run_model()$big_out %>% round(),
+  # Render the summary statistics in searchable/sortable table
+  output$summary_statistics <- renderDT(
+    get_statistics()$df,
     extensions = c("Buttons", "Scroller"), 
     rownames = FALSE,
     options = list(
       columnDefs = list(list(visible = FALSE, targets = c())),
-      pageLength = 50, 
+      pageLength = 10, 
+      dom = "Bfrtip", 
+      buttons = c("colvis", "copy", "csv", "excel", "pdf"), 
+      deferRender = TRUE, 
+      searchDelay = 500,
+      initComplete = JS(
+        "function(settings, json) {",
+        "$(this.api().table().header()).css({'background-color': '#fff', 'color': '#111'});",
+        "}"
+      )
+    )
+  )
+  
+  # Render uploaded Excel file (the "time" sheet) in searchable/sortable table
+  output$model_inputs_time1 <- renderDT(
+    get_inputs()$time1,
+    extensions = c("Buttons", "Scroller"), 
+    rownames = FALSE,
+    options = list(
+      columnDefs = list(list(visible = FALSE, targets = c())),
+      pageLength = 10, 
+      dom = "Bfrtip", 
+      buttons = c("colvis", "copy", "csv", "excel", "pdf"), 
+      deferRender = TRUE, 
+      searchDelay = 500,
+      initComplete = JS(
+        "function(settings, json) {",
+        "$(this.api().table().header()).css({'background-color': '#fff', 'color': '#111'});",
+        "}"
+      )
+    )
+  )
+  
+  # Render uploaded Excel file (the "time2" sheet) in searchable/sortable table
+  output$model_inputs_time2 <- renderDT(
+    get_inputs()$time2,
+    extensions = c("Buttons", "Scroller"), 
+    rownames = FALSE,
+    options = list(
+      columnDefs = list(list(visible = FALSE, targets = c())),
+      pageLength = 10, 
+      dom = "Bfrtip", 
+      buttons = c("colvis", "copy", "csv", "excel", "pdf"), 
+      deferRender = TRUE, 
+      searchDelay = 500,
+      initComplete = JS(
+        "function(settings, json) {",
+        "$(this.api().table().header()).css({'background-color': '#fff', 'color': '#111'});",
+        "}"
+      )
+    )
+  )
+  
+  # Render uploaded Excel file (the "inputs" sheet) in searchable/sortable table
+  output$model_inputs <- renderDT(
+    get_inputs()$inputs,
+    extensions = c("Buttons", "Scroller"), 
+    rownames = FALSE,
+    options = list(
+      columnDefs = list(list(visible = FALSE, targets = c())),
+      pageLength = 10, 
+      dom = "Bfrtip", 
+      buttons = c("colvis", "copy", "csv", "excel", "pdf"), 
+      deferRender = TRUE, 
+      searchDelay = 500,
+      initComplete = JS(
+        "function(settings, json) {",
+        "$(this.api().table().header()).css({'background-color': '#fff', 'color': '#111'});",
+        "}"
+      )
+    )
+  )
+  
+  # Render the SEIR model output in searchable/sortable table
+  output$model_output = renderDT(
+    run_model()$big_out[,grepl(paste0("Time|", input$age_group, collapse = ""), names(run_model()$big_out))] %>% round(),
+    extensions = c("Buttons", "Scroller"), 
+    rownames = FALSE,
+    options = list(
+      columnDefs = list(list(visible = FALSE, targets = c())),
+      pageLength = 10, 
       dom = "Bfrtip", 
       buttons = c("colvis", "copy", "csv", "excel", "pdf"), 
       deferRender = TRUE, 
