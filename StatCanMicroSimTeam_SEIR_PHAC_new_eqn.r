@@ -189,28 +189,28 @@ SEIR.n.Age.Classes <- function( time=NULL, age.parms = NULL, age.age.parms = NUL
     }
     
     with(as.list(c(list.inits, list.parms)),{
+      # check the symmetry condition
+      if(isSymmetric(beta,check.attributes=FALSE)==FALSE){stop("beta is not a symmetric matrix")}
+      if(isSymmetric(c_,check.attributes=FALSE)==FALSE){stop("c_ is not a symmetric matrix")}
+      if(isSymmetric(cq,check.attributes=FALSE)==FALSE){stop("cq is not a symmetric matrix")}
+      if(isSymmetric(cr,check.attributes=FALSE)==FALSE){stop("cr is not a symmetric matrix")}
       
-      N_all <- S + R + L + L_q + L_r + I_a + I_aqn + I_sm + I_ss + I_smisn + I_ssisn + I_ar + I_smr + I_ssr + I_smrisn + I_ssrisn + I_aq #the number of ind. alive
       I_sum <- I_a + I_aqn + I_sm + I_ss + I_smisn + I_ssisn + I_ar + I_smr + I_ssr + I_smrisn + I_ssrisn + phi*I_aq
       I_ssss <- I_ssis + I_ssisn + I_ssh + I_ssrisn
       c_BetaIprop <- CrBetaIprop <- CqBetaIprop <- C_OneMinusLambda <- one <- as.matrix(rep(1,nage))
       
-     # if (any(N_all==0)){stop("error: the *number of invidividuals in an age class is equal to zero")}else{I_prop <- I_sum * (1/N_all)}
-      
-      I_prop <- I_sum # I need to check how beta was computed because it is to low, so it cannot divide by N(a)
-  
       OneMinusLambda      <- (one - lambda)
-      c_BetaIprop         <- hadamard.prod(c_,beta) %*% I_prop          #I will include the part where the simetry of beta and C's is checked later
-      CqBetaIprop         <- hadamard.prod(cq,beta) %*% I_prop          
-      CrBetaIprop         <- hadamard.prod(cr,beta) %*% I_prop          
+      c_BetaIprop         <- hadamard.prod(c_,beta) %*% I_sum          
+      CqBetaIprop         <- hadamard.prod(cq,beta) %*% I_sum         
+      CrBetaIprop         <- hadamard.prod(cr,beta) %*% I_sum          
        
        
       # rates of change that depends on matrices 
       #--------------------------------------------
       dS   <- -((OneMinusLambda * tau * c_BetaIprop) + (lambda * CqBetaIprop) + (OneMinusLambda * (one-tau) * CrBetaIprop)) * S #new formula
-      dL   <- (OneMinusLambda * tau * c_BetaIprop) * S  - sigma * L                                                         #new formula
-      dL_q <- (lambda * CqBetaIprop) * S  - sigma * L_q                                                                     #new formula
-      dL_r <- (OneMinusLambda * (one-tau) * CrBetaIprop) * S  - sigma * L_r                                                 #new formula
+      dL   <- (OneMinusLambda * tau * c_BetaIprop) * S  - sigma * L                                                             #new formula
+      dL_q <- (lambda * CqBetaIprop) * S  - sigma * L_q                                                                         #new formula
+      dL_r <- (OneMinusLambda * (one-tau) * CrBetaIprop) * S  - sigma * L_r                                                     #new formula
       
       # rates of change that depends on vectors
       #--------------------------------------------
